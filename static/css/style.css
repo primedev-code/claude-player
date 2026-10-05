@@ -1,0 +1,329 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+    /* Claude palette — pulled darker than the marketing site per brief */
+    --bg-0: #0e0c0a;          /* deepest background */
+    --bg-1: #17140f;          /* body base */
+    --card-bg: rgba(28, 25, 21, 0.72);
+    --card-border: rgba(217, 119, 87, 0.16);
+    --accent: #d97757;        /* Claude terracotta */
+    --accent-soft: rgba(217, 119, 87, 0.35);
+    --accent-hover: #e6906f;
+    --text-primary: #f7f3ec;
+    --text-secondary: #a39a8c;
+    --text-faint: #6f675c;
+    --divider: rgba(255, 255, 255, 0.06);
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    padding-left: 8%;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    overflow: hidden;
+    background: radial-gradient(circle at 68% 50%, #1b1712 0%, var(--bg-1) 45%, var(--bg-0) 100%);
+    box-sizing: border-box;
+    color: var(--text-primary);
+}
+
+#bg-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+/* Карточка плеера в стиле Claude */
+.player-container {
+    position: relative;
+    z-index: 2;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 24px;
+    padding: 34px;
+    width: 320px;
+    text-align: center;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow:
+        0 25px 60px rgba(0, 0, 0, 0.55),
+        0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+        0 0 40px rgba(217, 119, 87, 0.06);
+    transition: box-shadow 0.4s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.player-container:hover {
+    transform: scale(1.015);
+    box-shadow:
+        0 28px 65px rgba(0, 0, 0, 0.55),
+        0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+        0 0 70px rgba(217, 119, 87, 0.16);
+}
+
+.cover-art {
+    width: 168px;
+    height: 168px;
+    margin: 0 auto 22px auto;
+    border-radius: 18px;
+    background: linear-gradient(155deg, #221e19 0%, #16130f 100%);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--accent);
+    box-shadow:
+        0 10px 28px rgba(0, 0, 0, 0.4),
+        0 0 30px rgba(217, 119, 87, 0.1);
+    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cover-art svg {
+    width: 54px;
+    height: 54px;
+}
+
+.player-container:hover .cover-art {
+    transform: scale(1.02);
+}
+
+#track-title {
+    font-size: 21px;
+    color: var(--text-primary);
+    margin: 8px 0 4px 0;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+}
+
+#track-artist {
+    font-size: 12px;
+    color: var(--accent);
+    margin: 0 0 24px 0;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    opacity: 0.85;
+}
+
+/* Прогресс-бар */
+.progress-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+.progress-container span {
+    font-size: 11px;
+    color: var(--text-faint);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+#progress-bar, #volume-bar {
+    accent-color: var(--accent);
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    outline: none;
+    transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+#progress-bar { width: 70%; height: 4px; }
+
+/* Лёгкая подсветка сразу при наведении, ещё до перетаскивания */
+#progress-bar:hover,
+#volume-bar:hover {
+    background: linear-gradient(90deg, rgba(217, 119, 87, 0.32), rgba(217, 119, 87, 0.06));
+    box-shadow: 0 0 10px rgba(217, 119, 87, 0.22);
+}
+
+/* Более сильная подсветка градиентом самой дорожки во время перетаскивания */
+#progress-bar.dragging,
+#volume-bar.dragging {
+    background: linear-gradient(90deg, rgba(217, 119, 87, 0.55), rgba(217, 119, 87, 0.08));
+    box-shadow: 0 0 14px rgba(217, 119, 87, 0.35);
+}
+
+#progress-bar::-webkit-slider-thumb,
+#volume-bar::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(217, 119, 87, 0.6);
+    cursor: pointer;
+    transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease;
+}
+#progress-bar::-moz-range-thumb,
+#volume-bar::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: none;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(217, 119, 87, 0.6);
+    cursor: pointer;
+    transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease;
+}
+
+/* Увеличение бегунка при нажатии/перетаскивании (WebKit + Firefox) */
+#progress-bar:active::-webkit-slider-thumb,
+#volume-bar:active::-webkit-slider-thumb,
+#progress-bar.dragging::-webkit-slider-thumb,
+#volume-bar.dragging::-webkit-slider-thumb {
+    transform: scale(1.35);
+    box-shadow: 0 0 16px 4px rgba(217, 119, 87, 0.75);
+}
+#progress-bar:active::-moz-range-thumb,
+#volume-bar:active::-moz-range-thumb,
+#progress-bar.dragging::-moz-range-thumb,
+#volume-bar.dragging::-moz-range-thumb {
+    transform: scale(1.35);
+    box-shadow: 0 0 16px 4px rgba(217, 119, 87, 0.75);
+}
+
+/* Блок громкости — та же стилистика, что и у progress-bar */
+.volume-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 22px;
+}
+.vol-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+.vol-icon svg { width: 14px; height: 14px; }
+#volume-bar { width: 72%; height: 4px; }
+
+/* Кнопки управления */
+.controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 6px;
+}
+.control-btn {
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 19px;
+    cursor: pointer;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    opacity: 0.75;
+}
+.control-btn:hover {
+    opacity: 1;
+    transform: scale(1.12);
+    color: var(--accent);
+    box-shadow: 0 0 18px rgba(217, 119, 87, 0.45);
+}
+
+.play-main {
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #1a1714;
+    font-size: 18px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 1;
+    box-shadow: 0 6px 20px rgba(217, 119, 87, 0.4);
+}
+.play-main:hover {
+    background: var(--accent-hover);
+    color: #1a1714;
+    transform: scale(1.07);
+    box-shadow: 0 6px 26px rgba(217, 119, 87, 0.55);
+}
+
+/* Плейлист */
+.playlist-container {
+    margin-top: 20px;
+    max-height: 140px;
+    overflow-y: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--divider);
+}
+
+.playlist-container::-webkit-scrollbar { width: 3px; }
+.playlist-container::-webkit-scrollbar-thumb { background: rgba(217, 119, 87, 0.3); border-radius: 3px; }
+
+#playlist-list { list-style: none; padding: 0; margin: 0; }
+
+.playlist-item {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-bottom: 4px;
+    background: rgba(255, 255, 255, 0.02);
+    border-left: 2px solid transparent;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+/* Волна выкатывания */
+.playlist-item::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(217, 119, 87, 0.16);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.playlist-item.active::before { transform: scaleX(1); }
+.playlist-item.active { border-left-color: var(--accent); }
+
+.playlist-item:hover { background: rgba(217, 119, 87, 0.07); }
+
+.track-num, .track-details { position: relative; z-index: 1; }
+.track-num { font-size: 11px; font-weight: 700; color: var(--accent); width: 18px; flex-shrink: 0; }
+.track-details { display: flex; flex-direction: column; text-align: left; min-width: 0; }
+.item-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.item-artist {
+    font-size: 10px;
+    color: var(--text-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

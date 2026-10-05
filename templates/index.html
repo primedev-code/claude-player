@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Claude Player</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+</head>
+<body>
+
+    <canvas id="bg-canvas"></canvas>
+
+    <div class="player-container">
+        <div class="track-info">
+            <div class="cover-art">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M9 18V5l12-2v13"/>
+                    <circle cx="6" cy="18" r="3"/>
+                    <circle cx="18" cy="16" r="3"/>
+                </svg>
+            </div>
+            <h2 id="track-title">Летний Вайб</h2>
+            <p id="track-artist">Аквамариновый Закат</p>
+        </div>
+        <div class="progress-container">
+            <span id="current-time">0:00</span>
+            <input type="range" id="progress-bar" min="0" max="100" value="30">
+            <span id="total-duration">3:45</span>
+        </div>
+        <div class="controls">
+            <button id="prev-btn" class="control-btn">⏮</button>
+            <button id="play-btn" class="control-btn play-main">▶</button>
+            <button id="next-btn" class="control-btn">⏭</button>
+        </div>
+        <div class="volume-container">
+            <span class="vol-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                </svg>
+            </span>
+            <input type="range" id="volume-bar" min="0" max="100" value="80">
+            <span class="vol-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                </svg>
+            </span>
+        </div>
+        <div class="playlist-container">
+            <ul id="playlist-list"></ul>
+        </div>
+    </div>
+
+    <script>
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "0:00";
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            const formattedSecs = secs < 10 ? '0' + secs : secs;
+            return mins + ':' + formattedSecs;
+        }
+
+        let playlist = [];
+        let currentTrackIndex = 0;
+        const audio = new Audio();
+        audio.crossOrigin = "anonymous";
+
+        function renderPlaylist() {
+            const playlistList = document.getElementById('playlist-list');
+            if (!playlistList) return;
+
+            playlistList.innerHTML = '';
+
+            playlist.forEach((track, index) => {
+                const li = document.createElement('li');
+                li.classList.add('playlist-item');
+                li.innerHTML = `
+                    <span class="track-num">${index + 1}</span>
+                    <div class="track-details">
+                        <span class="item-title">${track.title}</span>
+                        <span class="item-artist">${track.artist}</span>
+                    </div>
+                `;
+                li.addEventListener('click', () => {
+                    loadTrack(index);
+                    playAudio();
+                });
+
+                playlistList.appendChild(li);
+            });
+            updateActiveTrack(currentTrackIndex);
+        }
+
+        function updateActiveTrack(index) {
+            const items = document.querySelectorAll('.playlist-item');
+            items.forEach((item, i) => {
+                if (i === index) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        }
+
+        function loadTrack(index) {
+            if (playlist.length === 0) return;
+
+            const trackTitleEl = document.getElementById('track-title');
+            const trackArtistEl = document.getElementById('track-artist');
+            const progressBar = document.getElementById('progress-bar');
+            currentTrackIndex = index;
+            audio.src = playlist[currentTrackIndex].src;
+            trackTitleEl.textContent = playlist[currentTrackIndex].title;
+            trackArtistEl.textContent = playlist[currentTrackIndex].artist;
+            progressBar.value = 0;
+            updateActiveTrack(index);
+        }
+
+        async function fetchPlaylist() {
+            try {
+                await fetch('/api/tracks/scan', {method: 'POST'});
+                const response = await fetch('/api/tracks');
+                playlist = await response.json();
+                renderPlaylist();
+                if (playlist.length > 0) {
+                    loadTrack(0);
+                }
+            } catch (error) {
+                console.error("Не удалось загрузить плейлист", error);
+            }
+        }
+        fetchPlaylist();
+
+        const nextBtn = document.getElementById('next-btn');
+        const prevBtn = document.getElementById('prev-btn');
+        nextBtn.addEventListener('click', () => {
+            const wasPlaying = !audio.paused;
+            let nextIndex = currentTrackIndex + 1;
+            if (nextIndex >= playlist.length) {
+                nextIndex = 0;
+            }
+            loadTrack(nextIndex);
+            if (wasPlaying) playAudio();
+        });
+        prevBtn.addEventListener('click', () => {
+            const wasPlaying = !audio.paused;
+            let prevIndex = currentTrackIndex - 1;
+            if (prevIndex < 0) {
+                prevIndex = playlist.length - 1;
+            }
+            loadTrack(prevIndex);
+            if (wasPlaying) playAudio();
+        });
+
+        const playBtn = document.getElementById('play-btn');
+        playBtn.addEventListener('click', () => {
+            if (audio.paused) {
+                playAudio();
+            } else {
+                audio.pause();
+                playBtn.textContent = '▶';
+            }
+        });
+
+        function playAudio() {
+            setupAudioAnalyser();
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+            audio.play();
+            playBtn.textContent = '⏸';
+        }
+
+        const currentTimeEl = document.getElementById('current-time');
+        const totalDurationEl = document.getElementById('total-duration');
+        const progressBar = document.getElementById('progress-bar');
+        audio.addEventListener('timeupdate', () => {
+            const progressPercent = (audio.currentTime / audio.duration) * 100;
+            progressBar.value = progressPercent;
+            currentTimeEl.textContent = formatTime(audio.currentTime);
+            totalDurationEl.textContent = formatTime(audio.duration);
+        });
+        progressBar.addEventListener('input', () => {
+            const newTime = (progressBar.value / 100) * audio.duration;
+            audio.currentTime = newTime;
+        });
+
+        const volumeBar = document.getElementById('volume-bar');
+        audio.volume = volumeBar.value / 100;
+        volumeBar.addEventListener('input', () => {
+            audio.volume = volumeBar.value / 100;
+        });
+
+        // Увеличение и подсветка ползунков во время перетаскивания
+        function setupDragGlow(slider) {
+            const start = () => slider.classList.add('dragging');
+            const end = () => slider.classList.remove('dragging');
+            slider.addEventListener('mousedown', start);
+            slider.addEventListener('touchstart', start, { passive: true });
+            slider.addEventListener('mouseup', end);
+            slider.addEventListener('touchend', end);
+            // на случай, если отпустили курсор за пределами ползунка
+            document.addEventListener('mouseup', end);
+            document.addEventListener('touchend', end);
+        }
+        setupDragGlow(progressBar);
+        setupDragGlow(volumeBar);
+
+        /* ============================================================
+           Фоновая анимация — логотип Claude, реагирующий на музыку
+           ============================================================ */
+
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- Web Audio API: реальный анализ частот для реакции лучей ---
+        let audioCtx, analyser, dataArray, sourceNode;
+        function setupAudioAnalyser() {
+            if (audioCtx) return;
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                sourceNode = audioCtx.createMediaElementSource(audio);
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 64;
+                analyser.smoothingTimeConstant = 0.75;
+                sourceNode.connect(analyser);
+                analyser.connect(audioCtx.destination);
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+            } catch (e) {
+                console.warn("Web Audio API недоступен, используется fallback-анимация", e);
+            }
+        }
+
+        const numRays = 12; // больше лучей — плотнее и ближе к оригинальному значку
+        const rayLevels = new Array(numRays).fill(0); // сглаженные значения для плавности
+        // лёгкая органическая неравномерность длины/толщины лучей — в оригинальном
+        // значке Claude лучи не идеально одинаковые, а слегка "живые"
+        const rayLengthMultipliers = [1, 0.74, 0.92, 1.1, 0.8, 1.06, 0.88, 1.14, 0.78, 0.96, 1.04, 0.86];
+        const rayWidths = [26, 19, 24, 20, 28, 21, 25, 18, 27, 20, 23, 22];
+        let angle = 0;
+
+        // --- Наведение курсора на логотип ---
+        let mouseX = null;
+        let mouseY = null;
+        let hoverScale = 1; // сглаженный коэффициент увеличения при наведении
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        });
+        canvas.addEventListener('mouseleave', () => {
+            mouseX = null;
+            mouseY = null;
+        });
+
+        function getRayEnergy(i) {
+            if (!analyser || !dataArray) return null;
+            analyser.getByteFrequencyData(dataArray);
+            // распределяем лучи по нижним/средним частотам — там живёт "бит"
+            const bin = 2 + Math.floor((i / numRays) * (dataArray.length * 0.5));
+            return dataArray[bin] / 255; // 0..1
+        }
+
+        function drawLogo() {
+            const centerX = canvas.width * 0.68;
+            const centerY = canvas.height * 0.5;
+            const baseRadius = 64;   // x2 к прежним 32
+            const idleLength = 276;  // x2 к прежним 138
+            const maxBoost = 320;    // x2 к прежним 160
+
+            angle += 0.025;
+
+            // Наведён ли курсор на область логотипа — считаем от реального размера
+            // лучей в состоянии покоя, а не от максимума при пиках громкости,
+            // иначе зона наведения была намного больше самого рисунка
+            const hoverHitRadius = baseRadius + idleLength * 0.72 + 24;
+            let isHovering = false;
+            if (mouseX !== null) {
+                const dist = Math.hypot(mouseX - centerX, mouseY - centerY);
+                isHovering = dist < hoverHitRadius;
+            }
+            canvas.style.cursor = isHovering ? 'pointer' : 'default';
+            hoverScale += ((isHovering ? 1.18 : 1) - hoverScale) * 0.12;
+
+            // Градиент вместо плоской заливки — светлее к центру, глубже к кончикам
+            const outerReach = (baseRadius + idleLength + maxBoost) * hoverScale;
+            const rayGradient = ctx.createRadialGradient(
+                centerX, centerY, baseRadius * 0.5,
+                centerX, centerY, outerReach
+            );
+            rayGradient.addColorStop(0, '#e89b74');
+            rayGradient.addColorStop(0.45, '#d97757');
+            rayGradient.addColorStop(1, '#b85c3e');
+
+            for (let i = 0; i < numRays; i++) {
+                const rayAngle = (Math.PI * 2 / numRays) * i - Math.PI / 2;
+                const lengthMult = rayLengthMultipliers[i];
+
+                const energy = getRayEnergy(i);
+                let targetLength;
+                if (energy !== null && !audio.paused) {
+                    targetLength = (idleLength * 0.55 + energy * maxBoost) * lengthMult;
+                } else {
+                    // мягкое "дыхание", когда музыка не играет
+                    const breathe = Math.sin(angle * 1.2 + i * 1.4) * 30;
+                    targetLength = (idleLength * 0.7 + breathe) * lengthMult;
+                }
+
+                // сглаживание, чтобы лучи не дёргались
+                rayLevels[i] += (targetLength - rayLevels[i]) * 0.25;
+                const currentRayLength = Math.max(16, rayLevels[i]) * hoverScale;
+                const currentBaseRadius = baseRadius * hoverScale;
+
+                const startX = centerX + Math.cos(rayAngle) * currentBaseRadius;
+                const startY = centerY + Math.sin(rayAngle) * currentBaseRadius;
+                const endX = centerX + Math.cos(rayAngle) * (currentBaseRadius + currentRayLength);
+                const endY = centerY + Math.sin(rayAngle) * (currentBaseRadius + currentRayLength);
+
+                ctx.strokeStyle = rayGradient;
+                ctx.lineWidth = rayWidths[i] * hoverScale;
+                ctx.lineCap = 'round';
+                ctx.shadowBlur = 34;
+                ctx.shadowColor = 'rgba(217, 119, 87, 0.4)';
+
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+            }
+
+            // лучи сходятся в центре и сами формируют плотное ядро —
+            // отдельный залитый круг не нужен, как в оригинальном логотипе
+            ctx.shadowBlur = 0;
+        }
+
+        function animate() {
+            ctx.fillStyle = '#0e0c0a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            drawLogo();
+            requestAnimationFrame(animate);
+        }
+
+        if (prefersReducedMotion) {
+            ctx.fillStyle = '#0e0c0a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            drawLogo();
+        } else {
+            animate();
+        }
+    </script>
+</body>
+</html>
